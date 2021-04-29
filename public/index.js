@@ -55,13 +55,17 @@ function getTempList() {
 
 getTempList();
 
+function rnd(min,max) {
+  return (Math.random() * (max - min + 1) + min);
+}
+
 function test() {
   const xhr = new XMLHttpRequest();
-  const rnd = Math.floor(Math.random() * 10);
-  const rndT = (Math.random() * (45 - 15 + 1) + 15).toFixed(2);
+  const name = `0x0${Math.floor(rnd(1,5))}EED5641A1602EC`;
+  const temp = rnd(10,45).toFixed(2);
 
-  console.log(`R: ${rnd}`);
-  console.log(`T: ${rndT}`);
+  console.log(`R: ${name}`);
+  console.log(`T: ${temp}`);
 
   xhr.open("POST", '/setTemp', true);
   xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
@@ -72,5 +76,5 @@ function test() {
       console.log(xhr.response);
     }
   }
-  xhr.send(`name=${rnd}&t=${rndT}`);
+  xhr.send(`name=${name}&t=${temp}`);
 }
