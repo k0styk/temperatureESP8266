@@ -3,6 +3,7 @@
 #include <WiFiClient.h> 
 #include <ESP8266WebServer.h>
 #include <ESP8266HTTPClient.h>
+#include <WiFiClientSecureBearSSL.h>
 #include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -22,112 +23,78 @@
 #endif
 
 #ifdef DEBUG_ENABLE
-#define DEBUGTYPE(x,t) Serial.println(x,t)
+#define DEBUGTYPE(x,t) Serial.print(x,t)
 #else
 #define DEBUGTYPE(x,t)
 #endif
 
-/* Set these to your desired credentials. */
-const char *ssid = "";
-const char *password = "";
-const char *host = "";
+//                                 F3    01    9C    00    C8    DD    DA    D0    2D    87    37    95    F5    B8    65    99    56    0D    C2    CE
+const uint8_t fingerprint[20] = {0xF3, 0x01, 0x9C, 0x00, 0xC8, 0xDD, 0xDA, 0xD0, 0x2D, 0x87, 0x37, 0x95, 0xF5, 0xB8, 0x65, 0x99, 0x56, 0x0D, 0xC2, 0xCE};
+const char* serverName = "https://3temp.kostyk.repl.co/setTemp";
+unsigned long lastTime = 0;
+unsigned long timerDelay = 5000;
 
 OneWire oneWire(ONE_WIRE_BUS);
 
-DallasTemperature DS18B20(&oneWire);
+DallasTemperature sensors(&oneWire);
 DeviceAddress Thermometer;
 String deviceAddressStr;
 String temperatureStr;
-// char temperatureCString[6];
-// char temperatureFString[6];
 int deviceCount = 0;
-
-//=======================================================================
-//                    Power on setup
-//=======================================================================
 
 void getTemperature() {
   float tempC;
   float tempF;
   do {
-    DS18B20.requestTemperatures();
-    tempC = DS18B20.getTempCByIndex(0);
+    sensors.requestTemperatures();
+    tempC = sensors.getTempCByIndex(0);
     temperatureStr = String(tempC,2);
-    // dtostrf(tempC, 2, 2, temperatureCString);
     delay(100);
   } while (tempC == 85.0 || tempC == (-127.0));
 }
 
 void setAddress(DeviceAddress deviceAddress)
 { 
+  deviceAddressStr = "0x";
   for (uint8_t i = 0; i < 8; i++)
-  {
-    deviceAddressStr = "0x";
-    DEBUG("0x");
-    if (deviceAddress[i] < 0x10) {
-      DEBUG("0");
-      deviceAddressStr += "0";
-    }
-    deviceAddressStr += String(deviceAddress[i], HEX); 
-    DEBUGTYPE(deviceAddress[i], HEX);
-    if (i < 7) DEBUG(", ");
+  {    
+    if (deviceAddress[i] < 0x10) { deviceAddressStr += "0"; }
+    deviceAddressStr += String(deviceAddress[i], HEX);
   }
-  DEBUGLN("");
 }
 
+//=======================================================================
+//                    Power on setup
+//=======================================================================
 void setup() {
-  DS18B20.begin();
-
-  delay(1000);
   #ifdef DEBUG_ENABLE // так же зависит от первоначальной переменной
     Serial.begin(115200);
   #endif
   // WiFiManager
   WiFiManager wifiManager;
-
-  //wifiManager.resetSettings(); // run it once, if you want to erase all the stored information
-  wifiManager.setAPConfig(IPAddress(192,168,1,1), IPAddress(192,168,1,1), IPAddress(255,255,255,0));
-
+//  wifiManager.resetSettings(); // run it once, if you want to erase all the stored information
+  wifiManager.setConfigPortalTimeout(180);
   wifiManager.autoConnect("ESP_WiFi");
-  //wifiManager.autoConnect(); // or use this for auto generated name ESP + ChipID
-  
-  // if you get here you have connected to the WiFi
-  DEBUGLN("Connected.");
-  // WiFi.mode(WIFI_OFF);        //Prevents reconnection issue (taking too long to connect)
-  // delay(1000);
-  // WiFi.mode(WIFI_STA);        //This line hides the viewing of ESP as wifi hotspot
-  
-  // WiFi.begin(ssid, password);     //Connect to your WiFi router
-  DEBUGLN("Connecting");
-  // Wait for connection
-  // while (WiFi.status() != WL_CONNECTED) {
-  //   delay(500);
-  //   DEBUG(".");
-  // }
+  DEBUGLN("Connected.");  
 
-  // //If connection successful show IP address in serial monitor
-  // delay(1000);
-  // DEBUGLN("");
-  // DEBUGLN("Connected to ");
-  // DEBUGLN(ssid);
-  // DEBUGLN("IP address: ");
-  // DEBUGLN(WiFi.localIP());  //IP address assigned to your ESP
-  
+  sensors.begin();
+  delay(500);
   DEBUGLN("Locating devices...");
-  DEBUG("Found ");
   deviceCount = sensors.getDeviceCount();
+  DEBUG("Found: ");
   DEBUGTYPE(deviceCount, DEC);
   DEBUGLN(" devices.");
   DEBUGLN("");
   
-  DEBUGLN("Printing addresses...");
+  DEBUGLN("Printing addresses:");
   for (int i = 0;  i < deviceCount;  i++)
   {
+    sensors.getAddress(Thermometer, i);
+    setAddress(Thermometer);
     DEBUG("Sensor ");
     DEBUG(i+1);
     DEBUG(" : ");
-    sensors.getAddress(Thermometer, i);
-    setAddress(Thermometer);
+    DEBUGLN(deviceAddressStr);
   }
 }
 
@@ -135,25 +102,33 @@ void setup() {
 //                    Main Program Loop
 //=======================================================================
 void loop() {
-  HTTPClient http;    //Declare object of class HTTPClient
+  if ((millis() - lastTime) > timerDelay) {
+    if(WiFi.status()== WL_CONNECTED){
+      std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
+      client->setFingerprint(fingerprint);
+      HTTPClient https;
+      getTemperature();
 
-  getTemperature();
-  // client.println(temperatureCString);
-  // client.println(temperatureFString);
+      if (https.begin(*client, serverName)) {  // HTTPS
+        https.addHeader("Content-Type", "application/x-www-form-urlencoded");
+        String httpRequestData = "name="+deviceAddressStr+"&t="+temperatureStr;
+        int httpCode = https.POST(httpRequestData);
 
-  //Post Data
-  postData = "name="+deviceAddressStr+"&t="+temperatureStr;
-  
-  http.begin("https://3temp.kostyk.repl.co/setTemp");              //Specify request destination
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded");    //Specify content-type header
-
-  int httpCode = http.POST(postData);   //Send the request
-  String payload = http.getString();    //Get the response payload
-
-  DEBUG(httpCode);   //Print HTTP return code
-  DEBUG(payload);    //Print request response payload
-
-  http.end();  //Close connection
-  
-  delay(5000);  //Post Data at every 5 seconds
+        if (httpCode > 0) {
+          if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
+            String payload = https.getString();
+            DEBUGLN(payload);
+          }
+        } else {
+          DEBUG("[HTTPS] GET... failed, error: ");
+          DEBUGLN(https.errorToString(httpCode).c_str());
+        }
+        https.end();
+      }
+    }
+    else {
+      DEBUGLN("WiFi Disconnected");
+    }
+    lastTime = millis();
+  }
 }
