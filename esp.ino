@@ -1,14 +1,16 @@
-// #define DEBUG_ENABLE
+//#define DEBUG_ENABLE
 #include <ESP8266WiFi.h>
-#include <WiFiClient.h> 
-#include <ESP8266WebServer.h>
+#include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecureBearSSL.h>
-#include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
 #include <OneWire.h>
 #include <DallasTemperature.h>
 // контакт для передачи данных подключен к D1 на ESP8266 12-E (GPIO5):
 #define ONE_WIRE_BUS 5
+#ifndef STASSID
+#define STASSID "ssid"
+#define STAPSK  "password"
+#endif
 
 #ifdef DEBUG_ENABLE
   #define DEBUG(x) Serial.print(x)
@@ -32,6 +34,8 @@
 //                                 F3    01    9C    00    C8    DD    DA    D0    2D    87    37    95    F5    B8    65    99    56    0D    C2    CE
 const uint8_t fingerprint[20] = {0xF3, 0x01, 0x9C, 0x00, 0xC8, 0xDD, 0xDA, 0xD0, 0x2D, 0x87, 0x37, 0x95, 0xF5, 0xB8, 0x65, 0x99, 0x56, 0x0D, 0xC2, 0xCE};
 const char* serverName = "https://3temp.kostyk.repl.co/setTemp"; // адрес сервера
+const char* ssid     = STASSID;
+const char* password = STAPSK;
 unsigned long lastTime = 0; // переменные таймера
 unsigned long timerDelay = 5000; // переменная задержки таймера
 
@@ -39,6 +43,7 @@ unsigned long timerDelay = 5000; // переменная задержки тай
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 DeviceAddress Thermometer;
+ESP8266WiFiMulti wifiMulti;
 String deviceAddressStr;
 String temperatureStr;
 int deviceCount = 0;
@@ -72,12 +77,20 @@ void setup() {
   #ifdef DEBUG_ENABLE // так же зависит от первоначальной переменной
     Serial.begin(115200);
   #endif
-  // WiFiManager
-  WiFiManager wifiManager; // менеджер wifi, для настройки точки доступа
-  //  wifiManager.resetSettings(); // run it once, if you want to erase all the stored information
-  wifiManager.setConfigPortalTimeout(180); // время ожидания менеджера в сек
-  wifiManager.autoConnect("ESP_WiFi"); // имя точки доступа менеджера
-  DEBUGLN("Connected.");
+
+  wifiMulti.addAP(ssid, password);
+
+  DEBUGLN("Connecting ...");
+  int i = 0;
+  while (wifiMulti.run() != WL_CONNECTED) { // Wait for the Wi-Fi to connect: scan for Wi-Fi networks, and connect to the strongest of the networks above
+    delay(1000);
+    DEBUG('.');
+  }
+  DEBUGLN('\n');
+  DEBUG("Connected to ");
+  DEBUGLN(WiFi.SSID());              // Tell us what network we're connected to
+  DEBUG("IP address:\t");
+  DEBUGLN(WiFi.localIP());           // Send the IP address of the ESP8266 to the computer
 
   sensors.begin(); // опрос датчиков
   delay(500);
