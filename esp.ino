@@ -1,3 +1,4 @@
+// Подключение библиотек
 //#define DEBUG_ENABLE
 #include <ESP8266WiFi.h>
 #include <ESP8266WiFiMulti.h>
@@ -5,11 +6,11 @@
 #include <WiFiClientSecureBearSSL.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-// контакт для передачи данных подключен к D1 на ESP8266 12-E (GPIO5):
-#define ONE_WIRE_BUS 5
-#ifndef STASSID
-#define STASSID "ssid"
-#define STAPSK  "password"
+
+#define ONE_WIRE_BUS 5 // контакт для передачи данных подключен к D1 на ESP8266 12-E (GPIO5):
+#ifndef STASSID1 // может быть несколько WiFi настроек
+#define STASSID1 "ssid" // название WiFi
+#define STAPSK1  "password" // пароль WiFi
 #endif
 
 #ifdef DEBUG_ENABLE
@@ -31,11 +32,10 @@
 #endif
 
 // fingerprint нужен для https соединения с удалённым сервером
-//                                 F3    01    9C    00    C8    DD    DA    D0    2D    87    37    95    F5    B8    65    99    56    0D    C2    CE
 const uint8_t fingerprint[20] = {0xF3, 0x01, 0x9C, 0x00, 0xC8, 0xDD, 0xDA, 0xD0, 0x2D, 0x87, 0x37, 0x95, 0xF5, 0xB8, 0x65, 0x99, 0x56, 0x0D, 0xC2, 0xCE};
 const char* serverName = "https://3temp.kostyk.repl.co/setTemp"; // адрес сервера
-const char* ssid     = STASSID;
-const char* password = STAPSK;
+const char* ssid1     = STASSID1; // переменная имени WiFi сети
+const char* password1 = STAPSK1; // переменная пароля WiFi сети
 unsigned long lastTime = 0; // переменные таймера
 unsigned long timerDelay = 5000; // переменная задержки таймера
 
@@ -48,7 +48,7 @@ String deviceAddressStr;
 String temperatureStr;
 int deviceCount = 0;
 
-// функция опросника температуры у одного датчика
+// функция опросника температуры у датчика по индексу
 void getTemperature(int index) {
   float tempC;
   float tempF;
@@ -60,6 +60,7 @@ void getTemperature(int index) {
   } while (tempC == 85.0 || tempC == (-127.0));
 }
 
+// установка адреса в переменную deviceAddressStr
 void setAddress(DeviceAddress deviceAddress)
 { 
   deviceAddressStr = "0x";
@@ -78,19 +79,20 @@ void setup() {
     Serial.begin(115200);
   #endif
 
-  wifiMulti.addAP(ssid, password);
+  // библиотека wifiMulti позволяет несколько wifi настроек хранить
+  // и она выберет сама среди имеющихся настроенных wifi сетей, ту у которой сигнал лучше всего
+  wifiMulti.addAP(ssid1, password1);
 
   DEBUGLN("Connecting ...");
-  int i = 0;
-  while (wifiMulti.run() != WL_CONNECTED) { // Wait for the Wi-Fi to connect: scan for Wi-Fi networks, and connect to the strongest of the networks above
+  while (wifiMulti.run() != WL_CONNECTED) { // Ожидание подключения к WiFi: сканирование WiFi сети, и подключение к самому сильному сигналу
     delay(1000);
     DEBUG('.');
   }
   DEBUGLN('\n');
   DEBUG("Connected to ");
-  DEBUGLN(WiFi.SSID());              // Tell us what network we're connected to
+  DEBUGLN(WiFi.SSID());              // Вывод названия WiFi к которому подключились
   DEBUG("IP address:\t");
-  DEBUGLN(WiFi.localIP());           // Send the IP address of the ESP8266 to the computer
+  DEBUGLN(WiFi.localIP());           // Вывод IP адреса полученного от WiFi точки
 
   sensors.begin(); // опрос датчиков
   delay(500);
@@ -117,7 +119,7 @@ void setup() {
 //                    Main Program Loop
 //=======================================================================
 void loop() {
-  if ((millis() - lastTime) > timerDelay) { // неблокируемый основной поток таймер
+  if ((millis() - lastTime) > timerDelay) { // таймер - неблокируемый основной поток
     if(WiFi.status()== WL_CONNECTED) { // проверка если подключены к wifi
       std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure); // создание переменной client
       client->setFingerprint(fingerprint); // устанавливаем ключ шифрования для соединения
@@ -129,7 +131,7 @@ void loop() {
           getTemperature(i); // установка температуры в переменную
 
           https.addHeader("Content-Type", "application/x-www-form-urlencoded"); // установка заголовков для отправки POST
-          String httpRequestData = "name="+deviceAddressStr+"&t="+temperatureStr; // формирование POST строки
+          String httpRequestData = "name="+deviceAddressStr+"&t="+temperatureStr; // формирование POST строки из адреса датчика и температуры
           int httpCode = https.POST(httpRequestData); // отправка и получение ответа
 
           if (httpCode > 0) { // если http < 0 то ошибка
