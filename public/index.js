@@ -1,6 +1,7 @@
 function setContent(rooms,err) {
   const content = document.querySelector('body > div > div.content');
   
+  console.log(rooms);
   content.innerHTML = err || '';
   if(rooms) {
     if(rooms.length) {
@@ -54,27 +55,3 @@ function getTempList() {
 }
 
 getTempList();
-
-function rnd(min,max) {
-  return (Math.random() * (max - min + 1) + min);
-}
-
-function test() {
-  const xhr = new XMLHttpRequest();
-  const name = `0x0${Math.floor(rnd(1,5))}EED5641A1602EC`;
-  const temp = rnd(10,45).toFixed(2);
-
-  console.log(`R: ${name}`);
-  console.log(`T: ${temp}`);
-
-  xhr.open("POST", '/setTemp', true);
-  xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
-  
-  xhr.onreadystatechange = function () {//Вызывает функцию при смене состояния.
-    if (xhr.readyState == XMLHttpRequest.DONE && xhr.status == 200) {
-      // Запрос завершён. Здесь можно обрабатывать результат.
-      console.log(xhr.response);
-    }
-  }
-  xhr.send(`name=${name}&t=${temp}`);
-}
