@@ -1,5 +1,5 @@
 // Подключение библиотек
-//#define DEBUG_ENABLE
+#define DEBUG_ENABLE
 #include <ESP8266WiFi.h>
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
@@ -129,6 +129,9 @@ void loop() {
           sensors.getAddress(Thermometer, i); // получения адреса датчика
           setAddress(Thermometer); // установка адреса в переменную
           getTemperature(i); // установка температуры в переменную
+          
+          DEBUG("Sensor "+i+": ");
+          DEBUGLN(temperatureStr);
 
           https.addHeader("Content-Type", "application/x-www-form-urlencoded"); // установка заголовков для отправки POST
           String httpRequestData = "name="+deviceAddressStr+"&t="+temperatureStr; // формирование POST строки из адреса датчика и температуры
